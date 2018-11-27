@@ -1,6 +1,20 @@
 #include "commands.h"
 #include "graph.h"
 
+namespace std {
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+	os << "[";
+	bool first = true;
+	for (const auto& it: v) {
+		if (!first) os << ", ";
+		first = false;
+		os << it;
+	}
+	return os << "]";
+}
+}
+
 #include <boost/program_options.hpp>
 
 #include <chrono>
@@ -42,9 +56,18 @@ int main(int argc, char* argv[]) {
 		("help", "show help")
 		("commands", po::value<std::string>()->required(), "path to compile_commands.json")
 		("output", po::value<std::string>()->default_value(""), "output file for graphviz file")
+		("exclude", po::value<std::vector<std::string>>()->multitoken()->default_value(
+			{"/usr/include/", "/usr/lib/", "/build/"}
+		), "exclude patterns for files")
 	;
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, desc), vm);
+
+	if (vm.count("help")) {
+		std::cerr << desc << std::endl;
+		return 0;
+	}
+	
 	try {
 		po::notify(vm);
 	} catch (std::exception& e) {
@@ -52,12 +75,7 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	if (vm.count("help")) {
-		std::cerr << desc << std::endl;
-		return 0;
-	}
-
-	cppdeps::Graph graph;
+	cppdeps::Graph graph(vm["exclude"].as<std::vector<std::string>>());
 	{
 		auto queue = cppdeps::read_compile_commands(vm["commands"].as<std::string>());
 		Executor e{ graph };
@@ -66,6 +84,7 @@ int main(int argc, char* argv[]) {
 		);
 	}
 
+	graph.clean();
 	graph.layout();
 	graph.write_graphviz(vm["output"].as<std::string>());
 

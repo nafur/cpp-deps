@@ -14,21 +14,10 @@ namespace cppdeps {
 
 std::regex line_regex("(\\.+) (.+)");
 
-fs::path sanitize_filename(const fs::path& path) {
-	return fs::canonical(path);
-}
-fs::path clean_filename(const fs::path& path) {
-	return fs::relative(path, fs::path("/home/gereon/carl/src/carl/"));
-}
-
-bool consider_file(const fs::path& path) {
-	const auto name = path.string();
-	if (name.find("/usr/include/") != std::string::npos) return false;
-	if (name.find("/usr/lib/") != std::string::npos) return false;
-	if (name.find("build/resources/") != std::string::npos) return false;
-	if (name.find("examples/") != std::string::npos) return false;
-	if (name.find("tests/") != std::string::npos) return false;
-	return true;
+std::size_t longest_common_prefix(const std::string& s, const std::string& t) {
+	std::size_t res = 0;
+	while (res < s.size() && res < t.size() && s[res] == t[res]) ++res;
+	return res;
 }
 
 struct VertexData {
@@ -58,7 +47,15 @@ auto make_vertex_property_writer(const G& g) {
 	return vertex_property_writer<G>{ g };
 }
 
-Graph::Graph(): mGraph(std::make_unique<BoostGraph>()) {}
+bool Graph::consider_file(const fs::path& filename) {
+	const auto name = filename.string();
+	for (const auto& pattern: mExcludes) {
+		if (name.find(pattern) != std::string::npos) return false;
+	}
+	return true;
+}
+
+Graph::Graph(const std::vector<std::string>& excludes): mGraph(std::make_unique<BoostGraph>()), mExcludes(excludes) {}
 Graph::~Graph() {}
 
 void Graph::parse_output(const std::vector<std::string>& output, const std::string& filename) {
@@ -77,12 +74,10 @@ void Graph::parse_output(const std::vector<std::string>& output, const std::stri
 				stack.back() = match[2];
 			}
 
-			auto source_file = sanitize_filename(stack[stack.size() - 2]);
-			auto target_file = sanitize_filename(stack[stack.size() - 1]);
+			auto source_file = fs::canonical(stack[stack.size() - 2]);
+			auto target_file = fs::canonical(stack[stack.size() - 1]);
 
 			if (consider_file(source_file) && consider_file(target_file)) {
-				source_file = clean_filename(source_file);
-				target_file = clean_filename(target_file);
 				std::lock_guard<std::mutex> guard(mMutex);
 				auto source = boost::add_vertex(source_file, VertexData{ source_file }, *mGraph);
 				auto target = boost::add_vertex(target_file, VertexData{ target_file }, *mGraph);
@@ -91,6 +86,18 @@ void Graph::parse_output(const std::vector<std::string>& output, const std::stri
 				}
 			}
 		}
+	}
+}
+
+void Graph::clean() {
+	const auto& vert = boost::vertices(*mGraph);
+	std::string cur_prefix = mGraph->graph()[*vert.first].name;
+	std::size_t prefix_length = cur_prefix.size();
+	for (auto it = vert.first; it != vert.second; ++it) {
+		prefix_length = std::min(prefix_length, longest_common_prefix(cur_prefix, mGraph->graph()[*it].name));
+	}
+	for (auto it = vert.first; it != vert.second; ++it) {
+		mGraph->graph()[*it].name = mGraph->graph()[*it].name.substr(prefix_length);
 	}
 }
 
