@@ -54,7 +54,7 @@ int main(int argc, char* argv[]) {
 	po::options_description desc("Options");
 	desc.add_options()
 		("help", "show help")
-		("commands", po::value<std::string>()->required(), "path to compile_commands.json")
+		("source-dir", po::value<std::string>()->required(), "path to use for cmake configuration")
 		("output", po::value<std::string>()->default_value(""), "output file for graphviz file")
 		("exclude", po::value<std::vector<std::string>>()->multitoken()->default_value(
 			{"/usr/include/", "/usr/lib/", "/build/"}
@@ -75,13 +75,18 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
+
 	cppdeps::Graph graph(vm["exclude"].as<std::vector<std::string>>());
 	{
-		auto queue = cppdeps::read_compile_commands(vm["commands"].as<std::string>());
+		auto tmpdir = cppdeps::get_tmp_dir();
+		cppdeps::init_tmp_dir(tmpdir);
+		cppdeps::configure_cmake(tmpdir, vm["source-dir"].as<std::string>());
+		auto queue = cppdeps::read_compile_commands(tmpdir / "compile_commands.json");
 		Executor e{ graph };
 		std::for_each(queue.begin(), queue.end(),
 			[&e](const auto& f){ e(f); }
 		);
+		cppdeps::cleanup_tmp_dir(tmpdir);
 	}
 
 	graph.clean();

@@ -5,11 +5,26 @@
 #include <boost/property_map/property_map.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <iostream>
 
 namespace cppdeps {
 
 namespace pt = boost::property_tree;
 namespace pr = boost::process;
+
+fs::path get_tmp_dir() {
+	return std::filesystem::temp_directory_path() / "cppdeps";
+}
+void init_tmp_dir(const fs::path& tmpdir) {
+	std::filesystem::create_directory(tmpdir);
+}
+void cleanup_tmp_dir(const fs::path& tmpdir) {
+	std::filesystem::remove_all(tmpdir);
+}
+
+void configure_cmake(const fs::path& tmpdir, const fs::path& sourcedir) {
+	pr::system("cmake " + sourcedir.string(), pr::start_dir = tmpdir.string());
+}
 
 Files read_compile_commands(const fs::path& filename) {
 	Files files;

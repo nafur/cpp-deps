@@ -91,6 +91,7 @@ void Graph::parse_output(const std::vector<std::string>& output, const std::stri
 
 void Graph::clean() {
 	const auto& vert = boost::vertices(*mGraph);
+	if (vert.first == vert.second) return;
 	std::string cur_prefix = mGraph->graph()[*vert.first].name;
 	std::size_t prefix_length = cur_prefix.size();
 	for (auto it = vert.first; it != vert.second; ++it) {
