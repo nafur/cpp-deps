@@ -54,4 +54,8 @@ std::vector<std::string> execute_file(const File& file) {
 	return output;
 }
 
+void render_dot_file(const fs::path& filename) {
+	pr::system("neato -Tpdf -O " + filename.string());
+}
+
 }
