@@ -90,8 +90,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	graph.clean();
+	graph.analyze_components();
 	graph.layout();
 	graph.write_graphviz(vm["output"].as<std::string>());
+
+	cppdeps::render_dot_file(vm["output"].as<std::string>());
 
 	return 0;
 }
