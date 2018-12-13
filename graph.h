@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -14,6 +15,7 @@ struct BoostGraph;
 
 class Graph {
 	std::unique_ptr<BoostGraph> mGraph;
+	std::map<std::string,std::size_t> mVertices;
 	std::mutex mMutex;
 	std::vector<std::string> mExcludes;
 
@@ -23,6 +25,7 @@ public:
 	~Graph() noexcept;
 	void parse_output(const std::vector<std::string>& output, const std::string& filename);
 	void clean();
+	void analyze_components();
 	void layout();
 	void write_graphviz(const fs::path& filename = "") const;
 };

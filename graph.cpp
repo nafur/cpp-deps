@@ -7,6 +7,7 @@
 #include <boost/graph/graphviz.hpp>
 #include <boost/graph/labeled_graph.hpp>
 #include <boost/graph/point_traits.hpp>
+#include <boost/graph/strong_components.hpp>
 
 #include <regex>
 
@@ -23,19 +24,19 @@ std::size_t longest_common_prefix(const std::string& s, const std::string& t) {
 struct VertexData {
 	std::string name;
 	boost::square_topology<>::point point;
+	int component;
 };
-struct BoostGraph: public boost::labeled_graph<
-	boost::adjacency_list<
+struct BoostGraph: public boost::adjacency_list<
 		boost::vecS, boost::vecS, boost::directedS, VertexData
-	>,
-	std::string
-> {};
+	>
+{};
 
 template<typename G>
 struct vertex_property_writer {
 	template<typename VertexOrEdge>
 	void operator()(std::ostream& out, const VertexOrEdge& v) const {
 		out << "[";
+		out << "shape=box, ";
 		out << "label=" << boost::escape_dot_string(graph[v].name) << ", ";
 		out << "pos=\"" << graph[v].point[0] << "," << graph[v].point[1] << "!\"";
 		out << "]";
@@ -60,6 +61,15 @@ Graph::~Graph() {}
 
 void Graph::parse_output(const std::vector<std::string>& output, const std::string& filename) {
 	std::vector<std::string> stack({ filename });
+
+	auto get_vertex = [this](const std::string& path) {
+		auto it = mVertices.find(path);
+		if (it != mVertices.end()) return it->second;
+		auto vertex = boost::add_vertex(VertexData{ path }, *mGraph);
+		mVertices.emplace(path, vertex);
+		return vertex;
+	};
+
 	for (const auto& o: output) {
 		std::smatch match;
 		if (std::regex_match(o, match, line_regex)) {
@@ -79,8 +89,8 @@ void Graph::parse_output(const std::vector<std::string>& output, const std::stri
 
 			if (consider_file(source_file) && consider_file(target_file)) {
 				std::lock_guard<std::mutex> guard(mMutex);
-				auto source = boost::add_vertex(source_file, VertexData{ source_file }, *mGraph);
-				auto target = boost::add_vertex(target_file, VertexData{ target_file }, *mGraph);
+				auto source = get_vertex(source_file.string());
+				auto target = get_vertex(target_file.string());
 				if (!boost::edge(source, target, *mGraph).second) {
 					boost::add_edge(source, target, *mGraph);
 				}
@@ -92,13 +102,39 @@ void Graph::parse_output(const std::vector<std::string>& output, const std::stri
 void Graph::clean() {
 	const auto& vert = boost::vertices(*mGraph);
 	if (vert.first == vert.second) return;
-	std::string cur_prefix = mGraph->graph()[*vert.first].name;
+	std::string cur_prefix = (*mGraph)[*vert.first].name;
 	std::size_t prefix_length = cur_prefix.size();
 	for (auto it = vert.first; it != vert.second; ++it) {
-		prefix_length = std::min(prefix_length, longest_common_prefix(cur_prefix, mGraph->graph()[*it].name));
+		prefix_length = std::min(prefix_length, longest_common_prefix(cur_prefix, (*mGraph)[*it].name));
 	}
 	for (auto it = vert.first; it != vert.second; ++it) {
-		mGraph->graph()[*it].name = mGraph->graph()[*it].name.substr(prefix_length);
+		(*mGraph)[*it].name = (*mGraph)[*it].name.substr(prefix_length);
+	}
+}
+
+void Graph::analyze_components() {
+	std::vector<BoostGraph::edge_descriptor> tmp_edges;
+	auto edges = boost::edges(*mGraph);
+	for (auto it = edges.first; it != edges.second; ++it) {
+		auto pair = boost::add_edge(
+			boost::target(*it, *mGraph),
+			boost::source(*it, *mGraph),
+			*mGraph
+		);
+		tmp_edges.push_back(pair.first);
+	}
+
+	auto res = boost::strong_components(
+		*mGraph, boost::get(&VertexData::component, *mGraph)
+	);
+
+	for (const auto& e : tmp_edges) {
+		boost::remove_edge(e, *mGraph);
+	}
+
+	const auto& vert = boost::vertices(*mGraph);
+	for (auto it = vert.first; it != vert.second; ++it) {
+		std::cout << (*mGraph)[*it].name << " -> " << (*mGraph)[*it].component << std::endl;
 	}
 }
 
@@ -108,17 +144,17 @@ void Graph::layout() {
 	boost::fruchterman_reingold_force_directed_layout(
 		*mGraph,
 		boost::get(&VertexData::point, *mGraph),
-		boost::square_topology<>(40.0),
-		boost::cooling(boost::linear_cooling<double>(100))
+		boost::square_topology<>(30.0),
+		boost::cooling(boost::linear_cooling<double>(200))
 	);
 }
 
 void Graph::write_graphviz(const fs::path& filename) const {
 	if (filename == "") {
-		boost::write_graphviz(std::cout, *mGraph, make_vertex_property_writer(mGraph->graph()));
+		boost::write_graphviz(std::cout, *mGraph, make_vertex_property_writer((*mGraph)));
 	} else {
 		std::ofstream out(filename.string());
-		boost::write_graphviz(out, *mGraph, make_vertex_property_writer(mGraph->graph()));
+		boost::write_graphviz(out, *mGraph, make_vertex_property_writer((*mGraph)));
 		out.close();
 	}
 }
