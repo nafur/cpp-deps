@@ -48,6 +48,14 @@ auto make_vertex_property_writer(const G& g) {
 	return vertex_property_writer<G>{ g };
 }
 
+void Graph::clean_path(fs::path& filename) const {
+	std::string s = filename.string();
+	if (s.find(mTmp) == 0)
+	{
+		filename = fs::path(mSource + s.substr(mTmp.size() + 1));
+	}
+}
+
 bool Graph::consider_file(const fs::path& filename) {
 	const auto name = filename.string();
 	for (const auto& pattern: mExcludes) {
@@ -56,7 +64,7 @@ bool Graph::consider_file(const fs::path& filename) {
 	return true;
 }
 
-Graph::Graph(const std::vector<std::string>& excludes): mGraph(std::make_unique<BoostGraph>()), mExcludes(excludes) {}
+Graph::Graph(const std::vector<std::string>& excludes, const std::string& sourcedir, const std::string& tmpdir): mGraph(std::make_unique<BoostGraph>()), mExcludes(excludes), mSource(sourcedir), mTmp(tmpdir) {}
 Graph::~Graph() {}
 
 void Graph::parse_output(const std::vector<std::string>& output, const std::string& filename) {
@@ -86,6 +94,8 @@ void Graph::parse_output(const std::vector<std::string>& output, const std::stri
 
 			auto source_file = fs::canonical(stack[stack.size() - 2]);
 			auto target_file = fs::canonical(stack[stack.size() - 1]);
+			clean_path(source_file);
+			clean_path(target_file);
 
 			if (consider_file(source_file) && consider_file(target_file)) {
 				std::lock_guard<std::mutex> guard(mMutex);

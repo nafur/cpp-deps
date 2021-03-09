@@ -76,9 +76,9 @@ int main(int argc, char* argv[]) {
 	}
 
 
-	cppdeps::Graph graph(vm["exclude"].as<std::vector<std::string>>());
+	auto tmpdir = cppdeps::get_tmp_dir();
+	cppdeps::Graph graph(vm["exclude"].as<std::vector<std::string>>(), vm["source-dir"].as<std::string>(), tmpdir);
 	{
-		auto tmpdir = cppdeps::get_tmp_dir();
 		cppdeps::init_tmp_dir(tmpdir);
 		cppdeps::configure_cmake(tmpdir, vm["source-dir"].as<std::string>());
 		auto queue = cppdeps::read_compile_commands(tmpdir / "compile_commands.json");
